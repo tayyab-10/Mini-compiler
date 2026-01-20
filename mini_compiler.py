@@ -47,6 +47,38 @@ Token = getattr(_impl, "Token")
 Span = getattr(_impl, "Span")
 Position = getattr(_impl, "Position")
 
+# AST nodes (handy for interpreter/integrations)
+TypeRef = getattr(_impl, "TypeRef")
+ProgramNode = getattr(_impl, "ProgramNode")
+MethodDecl = getattr(_impl, "MethodDecl")
+VarDecl = getattr(_impl, "VarDecl")
+ConstDecl = getattr(_impl, "ConstDecl")
+ClassDecl = getattr(_impl, "ClassDecl")
+ClassField = getattr(_impl, "ClassField")
+Parameter = getattr(_impl, "Parameter")
+
+Statement = getattr(_impl, "Statement")
+BlockStatement = getattr(_impl, "BlockStatement")
+EmptyStatement = getattr(_impl, "EmptyStatement")
+AssignmentStatement = getattr(_impl, "AssignmentStatement")
+CallStatement = getattr(_impl, "CallStatement")
+IfStatement = getattr(_impl, "IfStatement")
+WhileStatement = getattr(_impl, "WhileStatement")
+ReturnStatement = getattr(_impl, "ReturnStatement")
+ReadStatement = getattr(_impl, "ReadStatement")
+PrintStatement = getattr(_impl, "PrintStatement")
+
+Expression = getattr(_impl, "Expression")
+DesignatorExpression = getattr(_impl, "DesignatorExpression")
+CallExpression = getattr(_impl, "CallExpression")
+DesignatorPart = getattr(_impl, "DesignatorPart")
+FieldAccess = getattr(_impl, "FieldAccess")
+IndexAccess = getattr(_impl, "IndexAccess")
+LiteralExpression = getattr(_impl, "LiteralExpression")
+UnaryExpression = getattr(_impl, "UnaryExpression")
+BinaryExpression = getattr(_impl, "BinaryExpression")
+NewExpression = getattr(_impl, "NewExpression")
+
 __all__ = [
 	"MiniCompilerEngine",
 	"CompilationArtifacts",
@@ -56,6 +88,34 @@ __all__ = [
 	"Token",
 	"Span",
 	"Position",
+	"TypeRef",
+	"ProgramNode",
+	"MethodDecl",
+	"VarDecl",
+	"ConstDecl",
+	"ClassDecl",
+	"ClassField",
+	"Parameter",
+	"Statement",
+	"BlockStatement",
+	"EmptyStatement",
+	"AssignmentStatement",
+	"CallStatement",
+	"IfStatement",
+	"WhileStatement",
+	"ReturnStatement",
+	"ReadStatement",
+	"PrintStatement",
+	"Expression",
+	"DesignatorExpression",
+	"CallExpression",
+	"DesignatorPart",
+	"FieldAccess",
+	"IndexAccess",
+	"LiteralExpression",
+	"UnaryExpression",
+	"BinaryExpression",
+	"NewExpression",
 ]
 
 

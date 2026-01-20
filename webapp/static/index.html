@@ -28,7 +28,7 @@
       header {
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        justify-content: flex-start;
         padding: 14px 18px;
         border-bottom: 1px solid var(--border);
         background: rgba(15,17,26,0.65);
@@ -40,6 +40,8 @@
         display: flex;
         flex-direction: column;
         gap: 2px;
+        text-align: left;
+        align-items: flex-start;
       }
       header h1 {
         margin: 0;
@@ -56,6 +58,7 @@
         align-items: center;
         flex-wrap: wrap;
         justify-content: flex-end;
+        margin-left: auto;
       }
       .btn {
         background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.06));
@@ -204,6 +207,16 @@
         border: 1px solid var(--border);
         overflow: auto;
       }
+      .stdin {
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: rgba(0,0,0,0.25);
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 12px;
+        min-width: 220px;
+      }
       @media (max-width: 1100px) {
         main { height: auto; }
         .grid { grid-template-columns: 1fr; }
@@ -241,6 +254,8 @@
         <label class="toggle"><input id="live" type="checkbox" checked /> Live compile</label>
         <button class="btn" id="openfile">Load from file</button>
         <button class="btn" id="sample">Demo sample</button>
+        <input class="stdin" id="stdin" placeholder="stdin (for read), e.g. 42" />
+        <button class="btn primary" id="run">Run</button>
         <button class="btn primary" id="compile">Compile</button>
       </div>
     </header>
@@ -266,6 +281,7 @@
             <div class="tab" data-tab="ast">AST</div>
             <div class="tab" data-tab="ast_graph">AST Graph</div>
             <div class="tab" data-tab="symbols">Symbols</div>
+            <div class="tab" data-tab="output">Output</div>
           </div>
           <div class="panel" id="panel"></div>
         </section>
@@ -283,6 +299,8 @@
       const stats = $("stats");
       const status = $("status");
       const live = $("live");
+      const stdinEl = $("stdin");
+      const btnRun = $("run");
       const btnCompile = $("compile");
       const btnSample = $("sample");
       const btnOpenFile = $("openfile");
@@ -513,6 +531,23 @@
           panel.innerHTML = `<pre>${escapeHtml(JSON.stringify(lastResult.symbols, null, 2))}</pre>`;
           return;
         }
+        if (activeTab === "output") {
+          const out = lastResult?.run?.output ?? "";
+          const steps = lastResult?.run?.steps ?? 0;
+          const err = lastResult?.run?.runtime_error;
+          const errHtml = err?.message
+            ? (() => {
+                const span = err.span?.start ? `${err.span.start.line}:${err.span.start.column}` : "-";
+                return `<div class="diag"><span class="badge err">RUNTIME</span>${escapeHtml(err.message)} <span class="muted">@ ${escapeHtml(span)}</span></div>`;
+              })()
+            : "";
+          panel.innerHTML = `
+            <div class="muted">Steps: <b>${steps}</b></div>
+            ${errHtml}
+            <pre style="white-space:pre-wrap">${escapeHtml(String(out))}</pre>
+          `;
+          return;
+        }
       }
 
       async function compileNow() {
@@ -537,6 +572,36 @@
         }
       }
 
+      async function runNow() {
+        const text = sourceEl.value;
+        const stdin = stdinEl?.value || "";
+        status.textContent = "Running…";
+        const t0 = performance.now();
+        try {
+          const res = await fetch("/api/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ source: text, stdin })
+          });
+          const data = await res.json();
+          lastResult = data;
+          const dt = performance.now() - t0;
+          stats.textContent = `time=${data.duration_ms?.toFixed?.(2) ?? "?"}ms • tokens=${data.token_count} • diags=${data.diagnostic_count} • roundtrip=${dt.toFixed(0)}ms`;
+          status.textContent = "Ready";
+
+          // Switch to Output tab after run.
+          activeTab = "output";
+          document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+          const outTab = document.querySelector('.tab[data-tab="output"]');
+          if (outTab) outTab.classList.add("active");
+
+          render();
+        } catch (e) {
+          status.textContent = "Error";
+          panel.innerHTML = `<div class="diag"><span class="badge err">ERROR</span>Failed to run: ${escapeHtml(String(e))}</div>`;
+        }
+      }
+
       function scheduleCompile() {
         if (!live.checked) return;
         if (timer) clearTimeout(timer);
@@ -553,6 +618,7 @@
       });
 
       btnCompile.addEventListener("click", compileNow);
+      btnRun.addEventListener("click", runNow);
       // Load from file (browser file picker) + compile.
       btnOpenFile.addEventListener("click", (e) => {
         e.preventDefault();

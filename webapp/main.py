@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 # Import the compiler engine from your existing file (core is defined before GUI).
 from mini_compiler import MiniCompilerEngine  # type: ignore
+from webapp.interpreter import MicroJavaInterpreter
 
 
 app = FastAPI(title="MicroJava Mini Compiler", version="1.0.0")
@@ -31,6 +32,12 @@ app.add_middleware(
 
 class CompileRequest(BaseModel):
 	source: str
+
+
+class RunRequest(BaseModel):
+	source: str
+	stdin: str = ""
+	max_steps: int = 50_000
 
 
 def _to_json(obj: Any, *, depth: int = 0, max_depth: int = 12) -> Any:
@@ -107,6 +114,63 @@ def compile_source(req: CompileRequest) -> Dict[str, Any]:
 			"global": list(getattr(art.symbols.global_scope, "symbols", {}).keys()),
 			"classes": {k: list(v.symbols.keys()) for k, v in getattr(art.symbols, "class_scopes", {}).items()},
 			"methods": {k: list(v.symbols.keys()) for k, v in getattr(art.symbols, "method_scopes", {}).items()},
+		},
+	}
+
+
+@app.post("/api/run")
+def run_source(req: RunRequest) -> Dict[str, Any]:
+	engine = MiniCompilerEngine()
+	art = engine.compile(req.source)
+
+	diags = [
+		{
+			"severity": d.severity.name if hasattr(d.severity, "name") else str(d.severity),
+			"message": d.message,
+			"hint": d.hint,
+			"span": _to_json(d.span),
+		}
+		for d in art.diagnostics
+	]
+	has_errors = any((d.get("severity") == "ERROR") for d in diags)
+
+	output = ""
+	runtime_error = None
+	steps = 0
+	if (not has_errors) and art.ast is not None:
+		interp = MicroJavaInterpreter(stdin=req.stdin or "", max_steps=req.max_steps or 50_000)
+		run_art = interp.run(art.ast)
+		output = run_art.output
+		steps = run_art.steps
+		if run_art.runtime_error is not None:
+			runtime_error = {"message": run_art.runtime_error.message, "span": _to_json(run_art.runtime_error.span)}
+
+	return {
+		"duration_ms": art.duration_ms,
+		"token_count": len(art.tokens),
+		"diagnostic_count": len(art.diagnostics),
+		"has_ast": art.ast is not None,
+		"diagnostics": diags,
+		"tokens": [
+			{
+				"kind": t.kind.name if hasattr(t.kind, "name") else str(t.kind),
+				"lexeme": t.lexeme,
+				"value": _to_json(t.value),
+				"span": _to_json(t.span),
+			}
+			for t in art.tokens
+			if getattr(t.kind, "name", "") != "EOF"
+		],
+		"ast": _to_json(art.ast),
+		"symbols": {
+			"global": list(getattr(art.symbols.global_scope, "symbols", {}).keys()),
+			"classes": {k: list(v.symbols.keys()) for k, v in getattr(art.symbols, "class_scopes", {}).items()},
+			"methods": {k: list(v.symbols.keys()) for k, v in getattr(art.symbols, "method_scopes", {}).items()},
+		},
+		"run": {
+			"output": output,
+			"steps": steps,
+			"runtime_error": runtime_error,
 		},
 	}
 
