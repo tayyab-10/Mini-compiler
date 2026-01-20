@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>MicroJava Mini Compiler</title>
+    <style>
+      :root {
+        --bg: #0f111a;
+        --panel: #161a28;
+        --text: #e6e6e6;
+        --muted: #a7adba;
+        --border: rgba(255,255,255,0.12);
+        --accent: #6cb6ff;
+        --err: #ff5c5c;
+        --warn: #ffd166;
+        --ok: #39d98a;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: var(--sans);
+        background: radial-gradient(1200px 800px at 10% 10%, #1a2250 0%, var(--bg) 55%);
+        color: var(--text);
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(15,17,26,0.65);
+        backdrop-filter: blur(8px);
+        z-index: 10;
+        flex-wrap: wrap;
+      }
+      header .title {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      header h1 {
+        margin: 0;
+        font-size: 16px;
+        letter-spacing: 0.2px;
+      }
+      header .subtitle {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+      .btn {
+        background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.06));
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 9px 12px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 13px;
+      }
+      .btn.primary {
+        border-color: rgba(108,182,255,0.5);
+        box-shadow: 0 0 0 4px rgba(108,182,255,0.12);
+      }
+      .toggle {
+        display: inline-flex;
+        gap: 8px;
+        align-items: center;
+        font-size: 13px;
+        color: var(--muted);
+        user-select: none;
+      }
+      .toggle input { accent-color: var(--accent); }
+
+      main {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        padding: 14px;
+        /* Let the page size naturally (header can wrap on mobile). */
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 14px;
+        min-height: 520px;
+      }
+      .card {
+        background: rgba(22,26,40,0.85);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .card .card-h {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 700;
+        font-size: 13px;
+      }
+      .meta {
+        font-family: var(--mono);
+        color: var(--muted);
+        font-size: 12px;
+      }
+      textarea {
+        border: 0;
+        outline: none;
+        resize: none;
+        width: 100%;
+        flex: 1;
+        height: auto;
+        min-height: 420px;
+        padding: 12px;
+        background: #0b0d14;
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 13px;
+        line-height: 1.4;
+      }
+      .tabs {
+        display: flex;
+        gap: 8px;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(0,0,0,0.12);
+      }
+      .tab {
+        padding: 8px 10px;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .tab.active {
+        color: var(--text);
+        border-color: rgba(108,182,255,0.35);
+        background: rgba(108,182,255,0.10);
+      }
+      .panel {
+        padding: 10px 12px;
+        overflow: auto;
+        min-height: 0;
+        font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      footer {
+        position: static;
+        border-top: 1px solid var(--border);
+        background: rgba(15,17,26,0.70);
+        backdrop-filter: blur(10px);
+        padding: 10px 14px;
+        color: var(--muted);
+        font-size: 12px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+      }
+      .diag {
+        padding: 10px 10px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        margin-bottom: 10px;
+        background: rgba(0,0,0,0.18);
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-weight: 800;
+        font-size: 11px;
+        letter-spacing: 0.2px;
+        border: 1px solid var(--border);
+        margin-right: 8px;
+      }
+      .badge.err { color: var(--err); border-color: rgba(255,92,92,0.35); }
+      .badge.warn { color: var(--warn); border-color: rgba(255,209,102,0.35); }
+      .badge.ok { color: var(--ok); border-color: rgba(57,217,138,0.35); }
+      .muted { color: var(--muted); }
+      pre {
+        margin: 8px 0 0 0;
+        padding: 10px;
+        border-radius: 12px;
+        background: rgba(0,0,0,0.25);
+        border: 1px solid var(--border);
+        overflow: auto;
+      }
+      @media (max-width: 1100px) {
+        main { height: auto; }
+        .grid { grid-template-columns: 1fr; }
+        .card { min-height: 420px; }
+      }
+      @media (max-width: 760px) {
+        header {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 10px;
+        }
+        .actions {
+          justify-content: flex-start;
+          gap: 8px;
+        }
+        .btn {
+          padding: 8px 10px;
+          font-size: 12px;
+          border-radius: 10px;
+        }
+        .toggle { font-size: 12px; }
+        header .subtitle { font-size: 11px; }
+        .grid { min-height: 0; }
+        textarea { min-height: 320px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="title">
+        <h1>MicroJava Mini Compiler (Web)</h1>
+        <div class="subtitle">Lexer → Parser → Symbol Table → Semantic checks • FastAPI backend</div>
+      </div>
+      <div class="actions">
+        <label class="toggle"><input id="live" type="checkbox" checked /> Live compile</label>
+        <button class="btn" id="openfile">Load from file</button>
+        <button class="btn" id="sample">Demo sample</button>
+        <button class="btn primary" id="compile">Compile</button>
+      </div>
+    </header>
+
+    <main>
+      <div class="grid">
+        <section class="card editor">
+          <div class="card-h">
+            <span>Editor</span>
+            <span class="meta" id="status">Ready</span>
+          </div>
+          <textarea id="src" spellcheck="false"></textarea>
+        </section>
+
+        <section class="card">
+          <div class="card-h">
+            <span>Results</span>
+            <span class="meta" id="stats"></span>
+          </div>
+          <div class="tabs">
+            <div class="tab active" data-tab="diagnostics">Diagnostics</div>
+            <div class="tab" data-tab="tokens">Tokens</div>
+            <div class="tab" data-tab="ast">AST</div>
+            <div class="tab" data-tab="ast_graph">AST Graph</div>
+            <div class="tab" data-tab="symbols">Symbols</div>
+          </div>
+          <div class="panel" id="panel"></div>
+        </section>
+      </div>
+    </main>
+
+    <footer>
+      <span>Made with ❤️ by Muhammad Tayyab</span>
+    </footer>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const sourceEl = $("src");
+      const panel = $("panel");
+      const stats = $("stats");
+      const status = $("status");
+      const live = $("live");
+      const btnCompile = $("compile");
+      const btnSample = $("sample");
+      const btnOpenFile = $("openfile");
+      const fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.accept = ".mj,.txt";
+      fileInput.style.display = "none";
+      document.body.appendChild(fileInput);
+      const btnExportJson = document.createElement("button");
+      const btnExportMd = document.createElement("button");
+
+      let activeTab = "diagnostics";
+      let lastResult = null;
+      let timer = null;
+
+      const sample = [
+        "program Sample",
+        "  final int size = 10;",
+        "  class Table { int[] pos; int[] neg; }",
+        "  int x, i;",
+        "{",
+        "  void main()",
+        "    int tmp;",
+        "    Table val;",
+        "  {",
+        "    val = new Table;",
+        "    val.pos = new int[size];",
+        "    i = 0;",
+        "    while (i < size) {",
+        "      val.pos[i] = 0;",
+        "      i = i + 1;",
+        "    }",
+        "    read(x);",
+        "    if (x > 0) { print(x); }",
+        "  }",
+        "}",
+        ""
+      ].join("\n");
+
+      // Add export buttons to the header actions (no backend needed).
+      btnExportJson.className = "btn";
+      btnExportJson.id = "export_json";
+      btnExportJson.textContent = "Export JSON";
+      btnExportMd.className = "btn";
+      btnExportMd.id = "export_md";
+      btnExportMd.textContent = "Export Markdown";
+      document.querySelector(".actions").insertBefore(btnExportJson, btnCompile);
+      document.querySelector(".actions").insertBefore(btnExportMd, btnCompile);
+
+      function escapeHtml(s) {
+        return s.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+      }
+
+      function downloadText(filename, text) {
+        const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      function diagnosticsToMarkdown(result, source) {
+        const diags = result?.diagnostics || [];
+        const lines = [];
+        lines.push("# MicroJava Mini Compiler — Web Report");
+        lines.push("");
+        lines.push(`- Time: **${(result?.duration_ms ?? 0).toFixed?.(2) ?? result?.duration_ms} ms**`);
+        lines.push(`- Tokens: **${result?.token_count ?? 0}**`);
+        lines.push(`- Diagnostics: **${result?.diagnostic_count ?? diags.length}**`);
+        lines.push("");
+        lines.push("## Diagnostics");
+        lines.push("");
+        if (!diags.length) {
+          lines.push("_No diagnostics._");
+        } else {
+          for (const d of diags) {
+            const span = d?.span?.start ? `${d.span.start.line}:${d.span.start.column}` : "-";
+            const hint = d.hint ? ` — _${d.hint}_` : "";
+            lines.push(`- **${d.severity}** at \`${span}\`: ${d.message}${hint}`);
+          }
+        }
+        lines.push("");
+        lines.push("## Source");
+        lines.push("");
+        lines.push("```text");
+        lines.push((source || "").replace(/\s+$/g, ""));
+        lines.push("```");
+        lines.push("");
+        return lines.join("\n");
+      }
+
+      // ---------------- AST Graph (simple SVG layout) ----------------
+      function astChildren(node) {
+        const out = [];
+        if (!node || typeof node !== "object") return out;
+        for (const [k, v] of Object.entries(node)) {
+          if (k === "_type" || k === "span") continue;
+          if (v && typeof v === "object" && v._type) out.push(v);
+          else if (Array.isArray(v)) {
+            for (const item of v) if (item && typeof item === "object" && item._type) out.push(item);
+          }
+        }
+        return out;
+      }
+
+      function astLabel(node) {
+        if (!node || typeof node !== "object") return "Node";
+        const t = node._type || "Node";
+        if (t === "ProgramNode") return `Program ${(node.name ?? "")}`.trim();
+        if (t === "ClassDecl") return `Class ${(node.name ?? "")}`.trim();
+        if (t === "MethodDecl") return `Method ${(node.name ?? "")}`.trim();
+        if (t === "VarDecl") return `Var ${(node.type_ref?.name ?? "")} ${(node.names ?? []).join(",")}`.trim();
+        if (t === "ConstDecl") return `Const ${(node.type_ref?.name ?? "")} ${(node.name ?? "")}`.trim();
+        return t;
+      }
+
+      function renderAstGraph(ast) {
+        if (!ast) {
+          panel.innerHTML = '<div class="muted">No AST (fix parse errors first).</div>';
+          return;
+        }
+        // BFS levels
+        const levels = [];
+        const q = [{ n: ast, d: 0 }];
+        const seen = new Set();
+        while (q.length) {
+          const { n, d } = q.shift();
+          if (!n || seen.has(n)) continue;
+          seen.add(n);
+          if (!levels[d]) levels[d] = [];
+          levels[d].push(n);
+          for (const c of astChildren(n)) q.push({ n: c, d: d + 1 });
+        }
+
+        const nodeW = 170, nodeH = 46, xGap = 46, yGap = 70, pad = 20;
+        const positions = new Map();
+        const width = Math.max(640, pad * 2 + Math.max(...levels.map(l => l.length)) * (nodeW + xGap));
+        const height = pad * 2 + levels.length * (nodeH + yGap);
+
+        for (let d = 0; d < levels.length; d++) {
+          const row = levels[d];
+          for (let i = 0; i < row.length; i++) {
+            const x = pad + i * (nodeW + xGap);
+            const y = pad + d * (nodeH + yGap);
+            positions.set(row[i], { x, y });
+          }
+        }
+
+        const svgParts = [];
+        svgParts.push(`<svg width="100%" viewBox="0 0 ${width} ${height}" style="display:block">`);
+        // edges
+        for (const row of levels) {
+          for (const n of row) {
+            const p0 = positions.get(n);
+            if (!p0) continue;
+            for (const c of astChildren(n)) {
+              const p1 = positions.get(c);
+              if (!p1) continue;
+              svgParts.push(
+                `<line x1="${p0.x + nodeW/2}" y1="${p0.y + nodeH}" x2="${p1.x + nodeW/2}" y2="${p1.y}" stroke="rgba(255,255,255,0.18)" stroke-width="2" />`
+              );
+            }
+          }
+        }
+        // nodes
+        for (const row of levels) {
+          for (const n of row) {
+            const p = positions.get(n);
+            if (!p) continue;
+            const label = escapeHtml(astLabel(n));
+            const span = n?.span?.start ? `${n.span.start.line}:${n.span.start.column}` : "";
+            svgParts.push(
+              `<g>
+                <rect x="${p.x}" y="${p.y}" width="${nodeW}" height="${nodeH}" rx="12" ry="12"
+                  fill="rgba(0,0,0,0.25)" stroke="rgba(108,182,255,0.40)" />
+                <text x="${p.x + 10}" y="${p.y + 20}" fill="#e6e6e6" font-family="ui-monospace,Consolas,monospace" font-size="12">${label}</text>
+                <text x="${p.x + 10}" y="${p.y + 38}" fill="#a7adba" font-family="ui-monospace,Consolas,monospace" font-size="11">${escapeHtml(span)}</text>
+              </g>`
+            );
+          }
+        }
+        svgParts.push("</svg>");
+        panel.innerHTML = `<div class="muted" style="margin-bottom:10px">AST Graph (layout-only). Use AST tab for full JSON.</div>${svgParts.join("")}`;
+      }
+
+      function render() {
+        if (!lastResult) {
+          panel.innerHTML = '<div class="muted">Compile to see results…</div>';
+          return;
+        }
+        if (activeTab === "diagnostics") {
+          const diags = lastResult.diagnostics || [];
+          if (!diags.length) {
+            panel.innerHTML = '<div class="diag"><span class="badge ok">OK</span>No diagnostics.</div>';
+            return;
+          }
+          panel.innerHTML = diags.map(d => {
+            const sev = (d.severity || "INFO").toUpperCase();
+            const cls = sev === "ERROR" ? "err" : (sev === "WARNING" ? "warn" : "ok");
+            const span = d.span?.start ? `${d.span.start.line}:${d.span.start.column}` : "-";
+            const hint = d.hint ? `<div class="muted" style="margin-top:6px">Hint: ${escapeHtml(d.hint)}</div>` : "";
+            return `<div class="diag">
+              <div><span class="badge ${cls}">${sev}</span><span class="muted">@ ${span}</span></div>
+              <div style="margin-top:6px">${escapeHtml(d.message || "")}</div>
+              ${hint}
+            </div>`;
+          }).join("");
+          return;
+        }
+        if (activeTab === "tokens") {
+          const t = lastResult.tokens || [];
+          panel.innerHTML = `<pre>${escapeHtml(JSON.stringify(t.slice(0, 200), null, 2))}${t.length>200 ? "\n... (truncated)" : ""}</pre>`;
+          return;
+        }
+        if (activeTab === "ast") {
+          panel.innerHTML = `<pre>${escapeHtml(JSON.stringify(lastResult.ast, null, 2))}</pre>`;
+          return;
+        }
+        if (activeTab === "ast_graph") {
+          renderAstGraph(lastResult.ast);
+          return;
+        }
+        if (activeTab === "symbols") {
+          panel.innerHTML = `<pre>${escapeHtml(JSON.stringify(lastResult.symbols, null, 2))}</pre>`;
+          return;
+        }
+      }
+
+      async function compileNow() {
+        const text = sourceEl.value;
+        status.textContent = "Compiling…";
+        const t0 = performance.now();
+        try {
+          const res = await fetch("/api/compile", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ source: text })
+          });
+          const data = await res.json();
+          lastResult = data;
+          const dt = performance.now() - t0;
+          stats.textContent = `time=${data.duration_ms?.toFixed?.(2) ?? "?"}ms • tokens=${data.token_count} • diags=${data.diagnostic_count} • roundtrip=${dt.toFixed(0)}ms`;
+          status.textContent = "Ready";
+          render();
+        } catch (e) {
+          status.textContent = "Error";
+          panel.innerHTML = `<div class="diag"><span class="badge err">ERROR</span>Failed to compile: ${escapeHtml(String(e))}</div>`;
+        }
+      }
+
+      function scheduleCompile() {
+        if (!live.checked) return;
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(compileNow, 350);
+      }
+
+      document.querySelectorAll(".tab").forEach(t => {
+        t.addEventListener("click", () => {
+          document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+          t.classList.add("active");
+          activeTab = t.dataset.tab;
+          render();
+        });
+      });
+
+      btnCompile.addEventListener("click", compileNow);
+      // Load from file (browser file picker) + compile.
+      btnOpenFile.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        fileInput.value = "";
+        fileInput.click();
+      });
+      fileInput.addEventListener("change", async () => {
+        const f = fileInput.files && fileInput.files[0];
+        if (!f) return;
+        const text = await f.text();
+        sourceEl.value = text;
+        compileNow();
+      });
+
+      // Demo sample for quick try-out.
+      btnSample.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        sourceEl.value = sample;
+        compileNow();
+      });
+      sourceEl.addEventListener("input", scheduleCompile);
+
+      btnExportJson.addEventListener("click", async () => {
+        if (!lastResult) await compileNow();
+        downloadText("microjava-report.json", JSON.stringify({ ...lastResult, source: sourceEl.value }, null, 2));
+      });
+      btnExportMd.addEventListener("click", async () => {
+        if (!lastResult) await compileNow();
+        downloadText("microjava-report.md", diagnosticsToMarkdown(lastResult, sourceEl.value));
+      });
+
+      // bootstrap
+      sourceEl.value = sample;
+      compileNow();
+    </script>
+  </body>
+</html>
+
+
