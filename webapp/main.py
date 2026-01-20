@@ -13,6 +13,17 @@ from pydantic import BaseModel
 # Import the compiler engine from your existing file (core is defined before GUI).
 from mini_compiler import MiniCompilerEngine  # type: ignore
 from webapp.interpreter import MicroJavaInterpreter
+from webapp.ll1 import (
+	EOF,
+	compute_first_sets,
+	compute_follow_sets,
+	compute_first_sets_with_trace,
+	compute_follow_sets_with_trace,
+	default_assignment_expr_grammar,
+	parse_tokens_ll1,
+	build_ll1_table,
+	parse_grammar_lines,
+)
 
 
 app = FastAPI(title="MicroJava Mini Compiler", version="1.0.0")
@@ -38,6 +49,17 @@ class RunRequest(BaseModel):
 	source: str
 	stdin: str = ""
 	max_steps: int = 50_000
+
+
+class LL1Request(BaseModel):
+	# Example: "id = num + id ;"
+	tokens: str
+	trace: bool = True
+	# Optional: supply your own grammar from the lab sheet (instead of the built-in demo grammar)
+	grammar_start: str | None = None
+	grammar_lines: list[str] | None = None
+	# Optional: include FIRST/FOLLOW iteration logs ("show working" support for lab report)
+	include_working: bool = False
 
 
 def _to_json(obj: Any, *, depth: int = 0, max_depth: int = 12) -> Any:
@@ -171,6 +193,78 @@ def run_source(req: RunRequest) -> Dict[str, Any]:
 			"output": output,
 			"steps": steps,
 			"runtime_error": runtime_error,
+		},
+	}
+
+
+@app.post("/api/ll1")
+def ll1_lab(req: LL1Request) -> Dict[str, Any]:
+	"""
+	LL(1) lab endpoint (FIRST/FOLLOW/LL(1) table + table-driven parsing with trace).
+
+	This is intentionally separate from the MicroJava compiler/parser so existing features remain unchanged.
+	"""
+	# Use instructor-provided grammar if supplied; otherwise fall back to the built-in demo grammar.
+	if req.grammar_lines and (req.grammar_start or ""):
+		grammar = parse_grammar_lines(start=req.grammar_start or "", lines=req.grammar_lines)
+	else:
+		grammar = default_assignment_expr_grammar()
+
+	first_working = None
+	follow_working = None
+	if req.include_working:
+		first, first_working = compute_first_sets_with_trace(grammar)
+		follow, follow_working = compute_follow_sets_with_trace(grammar, first)
+	else:
+		first = compute_first_sets(grammar)
+		follow = compute_follow_sets(grammar, first)
+	table, conflicts = build_ll1_table(grammar, first, follow)
+
+	tokens = [t for t in (req.tokens or "").split() if t]
+	result = parse_tokens_ll1(grammar, table, tokens, trace=bool(req.trace))
+
+	# Serialize table as strings for the frontend / JSON output
+	terminals_sorted = sorted(list(grammar.terminals | {EOF}))
+	table_out: Dict[str, Dict[str, str]] = {}
+	for nt in sorted(grammar.nonterminals):
+		row: Dict[str, str] = {}
+		for t in terminals_sorted:
+			p = table.get(nt, {}).get(t)
+			row[t] = str(p) if p is not None else ""
+		table_out[nt] = row
+
+	return {
+		"grammar": {
+			"start": grammar.start,
+			"nonterminals": sorted(grammar.nonterminals),
+			"terminals": terminals_sorted,
+			"productions": [str(p) for p in grammar.productions],
+		},
+		"first": {k: sorted(v) for k, v in first.items()},
+		"follow": {k: sorted(v) for k, v in follow.items()},
+		"working": {
+			"first_passes": first_working,
+			"follow_passes": follow_working,
+		}
+		if req.include_working
+		else None,
+		"table": table_out,
+		"conflicts": conflicts,
+		"input": {
+			"tokens": tokens,
+			"tokens_with_eof": tokens + [EOF],
+		},
+		"result": {
+			"accepted": result.accepted,
+			"error": result.error,
+			"steps": [
+				{
+					"stack": step.stack,
+					"remaining_input": step.remaining_input,
+					"action": step.action,
+				}
+				for step in result.steps
+			],
 		},
 	}
 

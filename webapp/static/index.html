@@ -135,6 +135,75 @@
         font-size: 13px;
         line-height: 1.4;
       }
+      /* Inline form controls used inside result panels (don't inherit editor sizing). */
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 8px 0;
+      }
+      .label {
+        font-family: var(--sans);
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .text-input, .mini-textarea {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: rgba(0,0,0,0.25);
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 12px;
+        padding: 10px 10px;
+        outline: none;
+      }
+      .mini-textarea {
+        resize: vertical;
+        min-height: 140px;
+        height: 140px;
+        width: 100%;
+        flex: unset;
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .btn.sm {
+        padding: 7px 10px;
+        font-size: 12px;
+        border-radius: 10px;
+      }
+      table.tbl {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+      table.tbl th, table.tbl td {
+        border: 1px solid var(--border);
+        padding: 8px 8px;
+        vertical-align: top;
+      }
+      table.tbl th {
+        background: rgba(0,0,0,0.18);
+        color: var(--muted);
+        font-family: var(--sans);
+        font-weight: 700;
+        position: sticky;
+        top: 0;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        font-family: var(--sans);
+        font-size: 11px;
+        color: var(--muted);
+      }
       .tabs {
         display: flex;
         gap: 8px;
@@ -282,6 +351,7 @@
             <div class="tab" data-tab="ast_graph">AST Graph</div>
             <div class="tab" data-tab="symbols">Symbols</div>
             <div class="tab" data-tab="output">Output</div>
+            <div class="tab" data-tab="ll1">LL(1) Lab</div>
           </div>
           <div class="panel" id="panel"></div>
         </section>
@@ -315,6 +385,26 @@
       let activeTab = "diagnostics";
       let lastResult = null;
       let timer = null;
+
+      // ---------------- LL(1) Lab State ----------------
+      const ll1State = {
+        tokens: "id = num + id ;",
+        grammarStart: "S",
+        grammarText: [
+          "S -> id = E ;",
+          "E -> T E'",
+          "E' -> + T E' | ε",
+          "E' -> ε",
+          "T -> F T'",
+          "T' -> * F T' | ε",
+          "T' -> ε",
+          "F -> ( E ) | id | num",
+        ].join("\\n"),
+        trace: true,
+        includeWorking: false,
+        last: null,
+        error: null,
+      };
 
       const sample = [
         "program Sample",
@@ -490,7 +580,204 @@
         panel.innerHTML = `<div class="muted" style="margin-bottom:10px">AST Graph (layout-only). Use AST tab for full JSON.</div>${svgParts.join("")}`;
       }
 
+      function renderSetMap(map) {
+        const keys = Object.keys(map || {}).sort();
+        if (!keys.length) return '<div class="muted">No data.</div>';
+        const rows = keys.map(k => {
+          const vals = (map[k] || []).join(", ");
+          return `<tr><th style="width:160px">${escapeHtml(k)}</th><td>${escapeHtml(vals)}</td></tr>`;
+        }).join("");
+        return `<table class="tbl"><tbody>${rows}</tbody></table>`;
+      }
+
+      function renderLl1Table(table, terminals, nonterminals) {
+        const terms = terminals || [];
+        const nts = nonterminals || Object.keys(table || {}).sort();
+        if (!terms.length || !nts.length) return '<div class="muted">No table.</div>';
+
+        const head = `<tr><th>Nonterminal</th>${terms.map(t => `<th>${escapeHtml(t)}</th>`).join("")}</tr>`;
+        const body = nts.map(nt => {
+          const row = table?.[nt] || {};
+          const tds = terms.map(t => {
+            const v = row?.[t] || "";
+            return `<td>${escapeHtml(v)}</td>`;
+          }).join("");
+          return `<tr><th style="width:160px">${escapeHtml(nt)}</th>${tds}</tr>`;
+        }).join("");
+        return `<table class="tbl"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+      }
+
+      function renderLl1Steps(steps) {
+        const s = steps || [];
+        if (!s.length) return '<div class="muted">No trace steps.</div>';
+        const head = `<tr><th style="width:70px">#</th><th>Stack</th><th>Input</th><th>Action</th></tr>`;
+        const body = s.map((st, i) => {
+          const stack = (st.stack || []).join(" ");
+          const inp = (st.remaining_input || []).join(" ");
+          const action = st.action || "";
+          return `<tr>
+            <td class="muted">${i}</td>
+            <td>${escapeHtml(stack)}</td>
+            <td>${escapeHtml(inp)}</td>
+            <td>${escapeHtml(action)}</td>
+          </tr>`;
+        }).join("");
+        return `<table class="tbl"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+      }
+
+      async function runLl1Now() {
+        const tokensEl = document.getElementById("ll1_tokens");
+        const startEl = document.getElementById("ll1_start");
+        const grammarEl = document.getElementById("ll1_grammar");
+        const traceEl = document.getElementById("ll1_trace");
+        const workingEl = document.getElementById("ll1_working");
+
+        ll1State.tokens = tokensEl?.value ?? ll1State.tokens;
+        ll1State.grammarStart = startEl?.value ?? ll1State.grammarStart;
+        ll1State.grammarText = grammarEl?.value ?? ll1State.grammarText;
+        ll1State.trace = !!traceEl?.checked;
+        ll1State.includeWorking = !!workingEl?.checked;
+
+        status.textContent = "LL(1)…";
+        ll1State.error = null;
+        try {
+          const grammarLines = (ll1State.grammarText || "")
+            .split(/\\r?\\n/g)
+            .map(s => s.trim())
+            .filter(Boolean);
+
+          const payload = {
+            tokens: ll1State.tokens || "",
+            trace: ll1State.trace,
+            include_working: ll1State.includeWorking,
+            grammar_start: ll1State.grammarStart || null,
+            grammar_lines: grammarLines.length ? grammarLines : null,
+          };
+
+          const res = await fetch("/api/ll1", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          ll1State.last = data;
+          status.textContent = "Ready";
+          render();
+        } catch (e) {
+          ll1State.error = String(e);
+          status.textContent = "Error";
+          render();
+        }
+      }
+
+      function renderLl1Lab() {
+        const r = ll1State.last;
+        const accepted = r?.result?.accepted;
+        const err = r?.result?.error;
+        const conflicts = r?.conflicts || [];
+        const grammar = r?.grammar || {};
+
+        const outcome = r
+          ? (accepted
+              ? `<div class="diag"><span class="badge ok">ACCEPTED</span><span class="muted">Input belongs to the grammar.</span></div>`
+              : `<div class="diag"><span class="badge err">ERROR</span>${escapeHtml(err || "Rejected")}</div>`)
+          : `<div class="muted">Run the LL(1) parser to see FIRST/FOLLOW/table/trace.</div>`;
+
+        const conflictHtml = conflicts.length
+          ? `<div class="diag"><span class="badge warn">CONFLICT</span>Grammar is NOT LL(1).<pre>${escapeHtml(conflicts.join("\\n"))}</pre></div>`
+          : (r ? `<div class="diag"><span class="badge ok">LL(1)</span>No table conflicts detected.</div>` : "");
+
+        const working = r?.working;
+        const workingHtml = working
+          ? `<details style="margin:10px 0">
+              <summary class="pill">Show FIRST/FOLLOW working (passes)</summary>
+              <pre>${escapeHtml(JSON.stringify(working, null, 2))}</pre>
+            </details>`
+          : "";
+
+        panel.innerHTML = `
+          <div style="display:flex; flex-direction:column; gap:10px">
+            <div class="row" style="justify-content:space-between">
+              <div class="muted">LL(1) Lab — FIRST / FOLLOW / Table-driven parser</div>
+              <div class="row">
+                <button class="btn sm" id="ll1_demo_valid">Load valid</button>
+                <button class="btn sm" id="ll1_demo_invalid">Load invalid</button>
+                <button class="btn primary sm" id="ll1_run">Run LL(1)</button>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="label">Input tokens (space-separated)</div>
+              <input id="ll1_tokens" class="text-input" value="${escapeHtml(ll1State.tokens)}" />
+            </div>
+
+            <div class="row">
+              <div class="field" style="min-width:160px; flex:1">
+                <div class="label">Start symbol</div>
+                <input id="ll1_start" class="text-input" value="${escapeHtml(ll1State.grammarStart)}" />
+              </div>
+              <label class="toggle"><input id="ll1_trace" type="checkbox" ${ll1State.trace ? "checked" : ""} /> Trace</label>
+              <label class="toggle"><input id="ll1_working" type="checkbox" ${ll1State.includeWorking ? "checked" : ""} /> Include working</label>
+            </div>
+
+            <div class="field">
+              <div class="label">Grammar (one production per line, supports | and ε)</div>
+              <textarea id="ll1_grammar" class="mini-textarea" spellcheck="false">${escapeHtml(ll1State.grammarText)}</textarea>
+            </div>
+
+            ${ll1State.error ? `<div class="diag"><span class="badge err">ERROR</span>${escapeHtml(ll1State.error)}</div>` : ""}
+            ${outcome}
+            ${conflictHtml}
+            ${workingHtml}
+
+            ${
+              r
+                ? `
+              <details open style="margin-top:6px">
+                <summary class="pill">FIRST sets</summary>
+                ${renderSetMap(r.first)}
+              </details>
+              <details open style="margin-top:6px">
+                <summary class="pill">FOLLOW sets</summary>
+                ${renderSetMap(r.follow)}
+              </details>
+              <details style="margin-top:6px">
+                <summary class="pill">LL(1) parsing table</summary>
+                ${renderLl1Table(r.table, grammar.terminals, grammar.nonterminals)}
+              </details>
+              <details style="margin-top:6px">
+                <summary class="pill">Trace (stack / input / action)</summary>
+                ${renderLl1Steps(r?.result?.steps)}
+              </details>
+              `
+                : ""
+            }
+          </div>
+        `;
+
+        // wire handlers after DOM update
+        const runBtn = document.getElementById("ll1_run");
+        const validBtn = document.getElementById("ll1_demo_valid");
+        const invalidBtn = document.getElementById("ll1_demo_invalid");
+        runBtn?.addEventListener("click", (e) => { e.preventDefault(); runLl1Now(); });
+        validBtn?.addEventListener("click", (e) => {
+          e.preventDefault();
+          const t = document.getElementById("ll1_tokens");
+          if (t) t.value = "id = num + id ;";
+        });
+        invalidBtn?.addEventListener("click", (e) => {
+          e.preventDefault();
+          const t = document.getElementById("ll1_tokens");
+          if (t) t.value = "id = ;";
+        });
+      }
+
       function render() {
+        // LL(1) tab is independent from MicroJava compile/run results.
+        if (activeTab === "ll1") {
+          renderLl1Lab();
+          return;
+        }
         if (!lastResult) {
           panel.innerHTML = '<div class="muted">Compile to see results…</div>';
           return;

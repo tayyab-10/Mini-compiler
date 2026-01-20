@@ -23,6 +23,40 @@ API:
 
 ---
 
+## LL(1) Parsing Lab (FIRST/FOLLOW + Table-Driven Parser)
+
+This repo includes a **table-driven LL(1) parsing module** aligned with the typical lab workflow:
+- Compute **FIRST** sets
+- Compute **FOLLOW** sets
+- Build the **LL(1) parsing table**
+- Run a **stack-based LL(1) parser** (optionally with step-by-step trace)
+
+### Endpoint
+
+- `POST /api/ll1`
+
+Body:
+
+```json
+{
+  "tokens": "id = num + id ;",
+  "trace": true
+}
+```
+
+### Example token inputs (from the lab sheet style)
+
+- Valid:
+  - `id = id ;`
+  - `id = num + id ;`
+- Invalid:
+  - `id id ;`
+  - `= id ;`
+  - `id = ;`
+
+---
+
+
 ## Deploy on Render (recommended)
 
 Render is a better fit than Vercel because this is a Python server.
