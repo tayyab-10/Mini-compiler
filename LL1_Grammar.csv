@@ -1,0 +1,23 @@
+Section,Production
+Original (left-recursive) common form,E -> E + T | T
+Original (left-recursive) common form,T -> T * F | F
+Original (left-recursive) common form,F -> ( E ) | id | num
+
+LL(1) equivalent used in this project,S -> id = E ;
+LL(1) equivalent used in this project,E -> T E'
+LL(1) equivalent used in this project,E' -> + T E' | eps
+LL(1) equivalent used in this project,T -> F T'
+LL(1) equivalent used in this project,T' -> * F T' | eps
+LL(1) equivalent used in this project,F -> ( E ) | id | num
+
+"Productions (expanded, one per line)",
+,S -> id = E ;
+,E -> T E'
+,E' -> + T E'
+,E' -> eps
+,T -> F T'
+,T' -> * F T'
+,T' -> eps
+,F -> ( E )
+,F -> id
+,F -> num

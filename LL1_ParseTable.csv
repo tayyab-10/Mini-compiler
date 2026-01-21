@@ -1,0 +1,7 @@
+NonTerminal,$,(,),*,+,;,=,id,num
+E,,E -> T E',,,,,,E -> T E',E -> T E'
+E',,,E' -> eps,,E' -> + T E',E' -> eps,,,
+F,,F -> ( E ),,,,,,F -> id,F -> num
+S,,,,,,,,S -> id = E ;,
+T,,T -> F T',,,,,,T -> F T',T -> F T'
+T',,,T' -> eps,T' -> * F T',T' -> eps,T' -> eps,,,

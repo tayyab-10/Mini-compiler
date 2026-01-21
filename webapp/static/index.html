@@ -399,7 +399,7 @@
           "T' -> * F T' | ε",
           "T' -> ε",
           "F -> ( E ) | id | num",
-        ].join("\\n"),
+        ].join("\n"),
         trace: true,
         includeWorking: false,
         last: null,
@@ -641,8 +641,14 @@
         status.textContent = "LL(1)…";
         ll1State.error = null;
         try {
-          const grammarLines = (ll1State.grammarText || "")
-            .split(/\\r?\\n/g)
+          // Accept both real newlines and the common pasted form containing literal "\n".
+          const grammarTextNormalized = (ll1State.grammarText || "")
+            .replace(/\\r\\n/g, "\n")
+            .replace(/\\n/g, "\n")
+            .replace(/\\r/g, "\r");
+
+          const grammarLines = grammarTextNormalized
+            .split(/\r?\n/g)
             .map(s => s.trim())
             .filter(Boolean);
 

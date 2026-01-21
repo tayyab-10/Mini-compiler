@@ -1,0 +1,7 @@
+FIRST,Symbols (sorted)
+E,( id num
+E',+ eps
+F,( id num
+S,id
+T,( id num
+T',* eps

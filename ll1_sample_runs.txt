@@ -1,0 +1,95 @@
+﻿=== GRAMMAR ===
+S -> id = E ;
+E -> T E'
+E' -> + T E'
+E' -> eps
+T -> F T'
+T' -> * F T'
+T' -> eps
+F -> ( E )
+F -> id
+F -> num
+
+=== FIRST ===
+E: ['(', 'id', 'num']
+E': ['+', 'eps']
+F: ['(', 'id', 'num']
+S: ['id']
+T: ['(', 'id', 'num']
+T': ['*', 'eps']
+
+=== FOLLOW ===
+E: [')', ';']
+E': [')', ';']
+F: [')', '*', '+', ';']
+S: ['$']
+T: [')', '+', ';']
+T': [')', '+', ';']
+
+=== LL(1) TABLE (non-empty cells) ===
+M[E, (] = E -> T E'
+M[E, id] = E -> T E'
+M[E, num] = E -> T E'
+M[E', )] = E' -> eps
+M[E', +] = E' -> + T E'
+M[E', ;] = E' -> eps
+M[F, (] = F -> ( E )
+M[F, id] = F -> id
+M[F, num] = F -> num
+M[S, id] = S -> id = E ;
+M[T, (] = T -> F T'
+M[T, id] = T -> F T'
+M[T, num] = T -> F T'
+M[T', )] = T' -> eps
+M[T', *] = T' -> * F T'
+M[T', +] = T' -> eps
+M[T', ;] = T' -> eps
+
+=== Conflicts ===
+[]
+
+=== Parse (valid): id = num + id ; ===
+accepted: True
+error: None
+steps: 21
+STACK: $ S | IN: id = num + id ; $ | ACT: init
+STACK: $ | IN: id = num + id ; $ | ACT: S -> id = E ;
+STACK: $ ; E = | IN: id = num + id ; $ | ACT: match id
+STACK: $ ; E | IN: = num + id ; $ | ACT: match =
+STACK: $ ; | IN: num + id ; $ | ACT: E -> T E'
+STACK: $ ; E' | IN: num + id ; $ | ACT: T -> F T'
+STACK: $ ; E' T' | IN: num + id ; $ | ACT: F -> num
+STACK: $ ; E' T' | IN: num + id ; $ | ACT: match num
+STACK: $ ; E' | IN: + id ; $ | ACT: T' -> eps
+STACK: $ ; E' | IN: + id ; $ | ACT: pop eps
+STACK: $ ; | IN: + id ; $ | ACT: E' -> + T E'
+STACK: $ ; E' T | IN: + id ; $ | ACT: match +
+STACK: $ ; E' | IN: id ; $ | ACT: T -> F T'
+STACK: $ ; E' T' | IN: id ; $ | ACT: F -> id
+STACK: $ ; E' T' | IN: id ; $ | ACT: match id
+STACK: $ ; E' | IN: ; $ | ACT: T' -> eps
+STACK: $ ; E' | IN: ; $ | ACT: pop eps
+STACK: $ ; | IN: ; $ | ACT: E' -> eps
+...
+STACK: $ ; E' | IN: + id ; $ | ACT: pop eps
+STACK: $ ; | IN: + id ; $ | ACT: E' -> + T E'
+STACK: $ ; E' T | IN: + id ; $ | ACT: match +
+STACK: $ ; E' | IN: id ; $ | ACT: T -> F T'
+STACK: $ ; E' T' | IN: id ; $ | ACT: F -> id
+STACK: $ ; E' T' | IN: id ; $ | ACT: match id
+STACK: $ ; E' | IN: ; $ | ACT: T' -> eps
+STACK: $ ; E' | IN: ; $ | ACT: pop eps
+STACK: $ ; | IN: ; $ | ACT: E' -> eps
+STACK: $ ; | IN: ; $ | ACT: pop eps
+STACK: $ | IN: ; $ | ACT: match ;
+STACK:  | IN: $ | ACT: match $
+
+=== Parse (invalid): id id ; ===
+accepted: False
+error: Mismatch: expected '=' but found 'id'
+steps: 3
+STACK: $ S | IN: id id ; $ | ACT: init
+STACK: $ | IN: id id ; $ | ACT: S -> id = E ;
+STACK: $ ; E = | IN: id id ; $ | ACT: match id
+
+(EOF symbol is: $ )
